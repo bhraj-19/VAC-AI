@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI Interview Practice Coach</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1b1f2a;--mut:#667085;--ac:#4f46e5;--acx:#fff;--bd:#e3e6ee;--ok:#15803d;--warn:#b45309;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1220;--card:#181c2e;--tx:#eceefa;--mut:#9aa3bd;--ac:#8b85ff;--acx:#0f1220;--bd:#2a2f47;--ok:#4ade80;--warn:#fbbf24;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1220;--card:#181c2e;--tx:#eceefa;--mut:#9aa3bd;--ac:#8b85ff;--acx:#0f1220;--bd:#2a2f47;--ok:#4ade80;--warn:#fbbf24;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.5rem;margin:8px 0 4px}h2{font-size:1.1rem;margin:0 0 8px}
+.sub{color:var(--mut);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px;margin-bottom:14px}
+label{display:block;font-weight:600;font-size:.9rem;margin:12px 0 4px}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+textarea{min-height:150px;resize:vertical}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;background:var(--ac);color:var(--acx)}
+button.sec{background:transparent;color:var(--tx);border:1px solid var(--bd)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center}
+.bar{height:6px;background:var(--bd);border-radius:6px;overflow:hidden;margin-bottom:14px}
+.bar i{display:block;height:100%;background:var(--ac);transition:width .3s}
+.q{font-size:1.15rem;font-weight:600}
+.tag{display:inline-block;font-size:.75rem;color:var(--mut);border:1px solid var(--bd);border-radius:99px;padding:2px 10px;margin-bottom:8px}
+.score{font-size:2rem;font-weight:700;color:var(--ac)}
+ul{margin:4px 0 8px;padding-left:20px}
+.ok h2{color:var(--ok)}.warn h2{color:var(--warn)}
+.mut{color:var(--mut);font-size:.9rem}
+.hide{display:none}
+.err{color:var(--warn)}
+</style>
+</head>
+<body>
+<main>
+<h1>🎤 AI Interview Practice Coach</h1>
+<p class="sub">Practise real interview questions and get instant, honest feedback.</p>
+
+<div id="setup" class="card">
+  <h2>Set up your session</h2>
+  <label for="role">Role you’re interviewing for</label>
+  <input id="role" placeholder="e.g. Junior Data Analyst" value="Software Engineer">
+  <label for="type">Interview type</label>
+  <select id="type"><option>Behavioural</option><option>Technical</option><option>HR / General</option><option>Situational</option></select>
+  <label for="level">Difficulty</label>
+  <select id="level"><option>Beginner</option><option selected>Intermediate</option><option>Advanced</option></select>
+  <label for="count">Number of questions</label>
+  <select id="count"><option>3</option><option selected>5</option><option>8</option></select>
+  <div class="row"><button id="start">Start interview</button></div>
+  <p id="serr" class="mut err"></p>
+</div>
+
+<div id="session" class="hide">
+  <div class="bar"><i id="prog" style="width:0"></i></div>
+  <div class="card">
+    <span class="tag" id="qmeta"></span>
+    <div class="q" id="qtext"></div>
+    <label for="ans">Your answer</label>
+    <textarea id="ans" placeholder="Type your answer, or use the mic…"></textarea>
+    <div class="row">
+      <button id="submit">Get feedback</button>
+      <button id="mic" class="sec">🎙 Speak</button>
+      <button id="skip" class="sec">Skip</button>
+    </div>
+    <p id="aerr" class="mut err"></p>
+  </div>
+  <div id="fb" class="hide"></div>
+</div>
+
+<div id="done" class="hide card"></div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+let sample=null,qs=[],i=0,results=[],cfg={},busy=false;
+
+(async()=>{try{sample=await claude.use("sample")}catch(e){sample=null}
+ if(!sample)$("serr").textContent="AI feedback isn’t available in this view. Open the artifact in claude.ai to use the coach.";})();
+
+const esc=s=>String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const list=a=>"<ul>"+(a||[]).map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>";
+
+$("start").onclick=async()=>{
+  if(!sample){$("serr").textContent="AI isn’t available here.";return}
+  cfg={role:$("role").value.trim()||"Software Engineer",type:$("type").value,level:$("level").value,n:+$("count").value};
+  $("start").disabled=true;$("start").textContent="Preparing questions…";$("serr").textContent="";
+  try{
+    const r=await sample.json(`Generate exactly ${cfg.n} distinct ${cfg.type} interview questions for a "${cfg.role}" candidate at ${cfg.level} difficulty. Return ONLY a JSON array of strings, no other text.`,{cache:false});
+    qs=(Array.isArray(r)?r:r.questions||[]).slice(0,cfg.n);
+    if(!qs.length)throw new Error("No questions returned");
+    i=0;results=[];$("setup").classList.add("hide");$("session").classList.remove("hide");show();
+  }catch(e){$("serr").textContent="Couldn’t create questions: "+(e.message||e.code||"try again");}
+  $("start").disabled=false;$("start").textContent="Start interview";
+};
+
+function show(){
+  $("fb").classList.add("hide");$("fb").innerHTML="";$("ans").value="";$("aerr").textContent="";
+  $("ans").disabled=false;$("submit").disabled=false;$("skip").classList.remove("hide");$("submit").classList.remove("hide");$("mic").classList.remove("hide");
+  $("qmeta").textContent=`Question ${i+1} of ${qs.length} · ${cfg.type}`;
+  $("qtext").textContent=qs[i];$("prog").style.width=(i/qs.length*100)+"%";
+}
+
+$("submit").onclick=async()=>{
+  const a=$("ans").value.trim();
+  if(a.length<15){$("aerr").textContent="Write a bit more so I can give useful feedback.";return}
+  if(busy)return;busy=true;$("submit").disabled=true;$("submit").textContent="Evaluating…";$("aerr").textContent="";
+  try{
+    const r=await sample.json(`You are a supportive but honest interview coach. Role: ${cfg.role}. Level: ${cfg.level}. Type: ${cfg.type}.
+Question: ${qs[i]}
+Candidate answer: ${a}
+Evaluate the answer. Return ONLY JSON: {"score": integer 1-10, "strengths": [2-3 short strings], "improvements": [2-3 short actionable strings], "better": "a concise improved sample answer (max 110 words) built on the candidate’s own content", "tip": "one-sentence delivery tip"}`,{cache:false});
+    results.push({q:qs[i],score:+r.score||0});
+    $("ans").disabled=true;$("submit").classList.add("hide");$("skip").classList.add("hide");$("mic").classList.add("hide");
+    const last=i===qs.length-1;
+    $("fb").innerHTML=`<div class="card"><div class="score">${esc(r.score)}/10</div><p class="mut">${esc(r.tip)}</p></div>
+    <div class="card ok"><h2>✅ What worked</h2>${list(r.strengths)}</div>
+    <div class="card warn"><h2>🔧 Improve</h2>${list(r.improvements)}</div>
+    <div class="card"><h2>💡 Stronger version</h2><p>${esc(r.better)}</p></div>
+    <div class="row"><button id="next">${last?"Finish & see summary":"Next question"}</button></div>`;
+    $("fb").classList.remove("hide");$("next").onclick=next;$("fb").scrollIntoView({behavior:"smooth"});
+  }catch(e){$("aerr").textContent="Evaluation failed: "+(e.message||e.code||"try again");}
+  busy=false;$("submit").disabled=false;$("submit").textContent="Get feedback";
+};
+$("skip").onclick=next;
+
+function next(){i++;if(i>=qs.length)return finish();show();window.scrollTo({top:0,behavior:"smooth"})}
+
+function finish(){
+  $("session").classList.add("hide");$("done").classList.remove("hide");
+  const avg=results.length?(results.reduce((s,r)=>s+r.score,0)/results.length).toFixed(1):"–";
+  $("done").innerHTML=`<h2>Session complete 🎉</h2><div class="score">${avg}/10</div><p class="mut">Average across ${results.length} answered question(s)</p>
+  <ul>${results.map(r=>`<li><b>${r.score}/10</b> — ${esc(r.q)}</li>`).join("")}</ul>
+  <div class="row"><button id="again">Practise again</button></div>`;
+  $("again").onclick=()=>{$("done").classList.add("hide");$("setup").classList.remove("hide")};
+}
+
+// Optional voice input
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let rec=null,on=false;
+if(!SR)$("mic").classList.add("hide");
+$("mic").onclick=()=>{
+  if(on){rec.stop();return}
+  rec=new SR();rec.lang="en-US";rec.continuous=true;rec.interimResults=false;
+  rec.onresult=e=>{let t="";for(let k=e.resultIndex;k<e.results.length;k++)t+=e.results[k][0].transcript+" ";$("ans").value=($("ans").value+" "+t).trim()};
+  rec.onend=()=>{on=false;$("mic").textContent="🎙 Speak"};
+  rec.onerror=()=>{on=false;$("mic").textContent="🎙 Speak"};
+  try{rec.start();on=true;$("mic").textContent="⏹ Stop"}catch(e){}
+};
+</script>
+</body>
+</html>
